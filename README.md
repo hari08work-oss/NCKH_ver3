@@ -16,17 +16,17 @@ Kết quả triển khai dưới dạng **Flask Web App**, cho phép người d�
 
 ## 📂 Cấu trúc thư mục
 
-MFWOA_Transformer_Project/
-│── README.md
-│── requirements.txt
-│
-├── data/
-│ ├── train/ # train images (covid/, noncovid/, …)
-│ ├── val/
-│ └── test/
-│
-├── outputs/
-│ ├── checkpoints/ # best_model.pth (Transformer), unet_baseline.pth
+MFWOA_Transformer_Project/```
+│── README.md```
+│── requirements.txt```
+│```
+├── data/```
+│ ├── train/ # train images (covid/, noncovid/, …)```
+│ ├── val/```
+│ └── test/```
+│```
+├── outputs/```
+│ ├── checkpoints/ # best_model.pth (Transformer), unet_baseline.pth```
 │ ├── logs/
 │ └── results/
 │
