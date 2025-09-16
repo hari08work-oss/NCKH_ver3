@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pkl
+*.pth
+*.pt
+
+# Env
+.venv/
+env/
+venv/
+*.egg-info/
+
+# Outputs
+outputs/checkpoints/
+outputs/logs/
+outputs/results/
+
+# IDE
+.vscode/
+.idea/
