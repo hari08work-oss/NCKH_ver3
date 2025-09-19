@@ -4,9 +4,9 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
+import numpy as np
 
 IMG_EXT = [".png", ".jpg", ".jpeg", ".bmp"]
-
 
 # ---------------- Augmentation ----------------
 def get_transforms(img_size=256, is_train=True):
@@ -30,7 +30,6 @@ def get_transforms(img_size=256, is_train=True):
             A.Normalize(mean=(0.5,), std=(0.5,)),
             ToTensorV2()
         ])
-
 
 # ---------------- Dataset ----------------
 class MultiTaskDataset(Dataset):
@@ -75,7 +74,7 @@ class MultiTaskDataset(Dataset):
     def __getitem__(self, idx):
         img_path, mask_path, label = self.samples[idx]
 
-        # load ảnh
+        # load ảnh gốc (grayscale)
         img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
         if img is None:
             raise FileNotFoundError(f"[ERROR] Không đọc được ảnh: {img_path}")
@@ -84,9 +83,9 @@ class MultiTaskDataset(Dataset):
         if mask_path and os.path.exists(mask_path):
             mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
         else:
-            mask = torch.zeros((self.img_size, self.img_size), dtype=torch.float32).numpy()
+            mask = np.zeros((img.shape[0], img.shape[1]), dtype=np.uint8)  # numpy array
 
-        # apply transform
+        # apply transform (Albumentations)
         if self.transform:
             augmented = self.transform(image=img, mask=mask)
             img, mask = augmented["image"], augmented["mask"]
@@ -99,7 +98,6 @@ class MultiTaskDataset(Dataset):
 
         label = torch.tensor(label, dtype=torch.long)
         return img, mask, label
-
 
 # ---------------- DataLoader ----------------
 def get_loader(img_dir, mask_dir=None, class_to_idx=None,
