@@ -18,7 +18,6 @@ def train(epochs, model_class, use_best_config=True, best_config_path="outputs/b
             cfg = obj["config"]
             print("[TRAIN] Loaded best_config:", cfg)
     else:
-        # fallback default
         cfg = {
             "lr": LR,
             "weight_decay": 1e-4,
@@ -26,8 +25,8 @@ def train(epochs, model_class, use_best_config=True, best_config_path="outputs/b
             "num_heads": 4,
             "emb_size": 256,
             "patch_size": 16,
-            "img_size": 512,
-            "batch_size": BATCH_SIZE
+            "img_size": 256,      # 👉 mặc định dùng 256 để đỡ tốn GPU
+            "batch_size": 1       # 👉 batch_size=1 cho GPU 4GB
         }
         print("[TRAIN] Using default config:", cfg)
 
@@ -48,8 +47,10 @@ def train(epochs, model_class, use_best_config=True, best_config_path="outputs/b
     criterion = nn.BCEWithLogitsLoss()
 
     # ----- data -----
-    train_loader = get_loader(DATA_DIR + "/train", MASK_DIR + "/train", batch_size=cfg["batch_size"])
-    val_loader = get_loader(DATA_DIR + "/val", MASK_DIR + "/val", batch_size=cfg["batch_size"], shuffle=False)
+    train_loader = get_loader(DATA_DIR + "/train", MASK_DIR + "/train",
+                              batch_size=cfg["batch_size"], img_size=cfg["img_size"])
+    val_loader = get_loader(DATA_DIR + "/val", MASK_DIR + "/val",
+                            batch_size=cfg["batch_size"], shuffle=False, img_size=cfg["img_size"])
 
     best_dice = 0.0
     total_start = time.time()
@@ -62,15 +63,14 @@ def train(epochs, model_class, use_best_config=True, best_config_path="outputs/b
         loop = tqdm(train_loader, leave=False)
         loop.set_description(f"Epoch [{epoch}/{epochs}]")
 
-        for imgs, masks, _ in loop:   # chú ý: data_loader trả về (img, mask, label)
-            # resize về kích thước tối ưu
-            imgs = torch.nn.functional.interpolate(imgs, size=(cfg["img_size"], cfg["img_size"]), mode="bilinear", align_corners=False)
-            masks = torch.nn.functional.interpolate(masks, size=(cfg["img_size"], cfg["img_size"]), mode="nearest")
-
+        for imgs, masks, _ in loop:
             imgs, masks = imgs.to(DEVICE), masks.to(DEVICE)
-            preds = model(imgs)
-            loss = criterion(preds, masks)
 
+            preds = model(imgs)
+            if preds.shape[2:] != masks.shape[2:]:
+                preds = torch.nn.functional.interpolate(preds, size=masks.shape[2:], mode="bilinear", align_corners=False)
+
+            loss = criterion(preds, masks)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -89,11 +89,11 @@ def train(epochs, model_class, use_best_config=True, best_config_path="outputs/b
         val_loss, val_dice, val_iou = 0, 0, 0
         with torch.no_grad():
             for imgs, masks, _ in val_loader:
-                imgs = torch.nn.functional.interpolate(imgs, size=(cfg["img_size"], cfg["img_size"]), mode="bilinear", align_corners=False)
-                masks = torch.nn.functional.interpolate(masks, size=(cfg["img_size"], cfg["img_size"]), mode="nearest")
-
                 imgs, masks = imgs.to(DEVICE), masks.to(DEVICE)
                 preds = model(imgs)
+                if preds.shape[2:] != masks.shape[2:]:
+                    preds = torch.nn.functional.interpolate(preds, size=masks.shape[2:], mode="bilinear", align_corners=False)
+
                 loss = criterion(preds, masks)
                 val_loss += loss.item()
                 val_dice += dice_score(preds, masks).item()
@@ -132,7 +132,7 @@ if __name__ == "__main__":
         model_class = UNet
     else:
         print("[INFO] Training Transformer (TransUNet)...")
-        from models.transformer import TransUNet
+        from src.models.transformer import TransUNet
         model_class = TransUNet
 
     train(args.epochs, model_class, use_best_config=not args.no_best_config)
