@@ -2,36 +2,10 @@ import os
 import cv2
 import torch
 from torch.utils.data import Dataset, DataLoader
-import albumentations as A
-from albumentations.pytorch import ToTensorV2
-import numpy as np
 
 IMG_EXT = [".png", ".jpg", ".jpeg", ".bmp"]
 
-# ---------------- Augmentation ----------------
-def get_transforms(img_size=256, is_train=True):
-    if is_train:
-        return A.Compose([
-            A.Resize(img_size, img_size),
-            A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.2),
-            A.RandomRotate90(p=0.5),
-            A.ShiftScaleRotate(shift_limit=0.05, scale_limit=0.1,
-                               rotate_limit=15, p=0.5),
-            A.RandomBrightnessContrast(p=0.3),
-            A.CLAHE(p=0.3),
-            A.GaussianBlur(p=0.2),
-            A.Normalize(mean=(0.5,), std=(0.5,)),   # chuẩn hóa grayscale
-            ToTensorV2()
-        ])
-    else:
-        return A.Compose([
-            A.Resize(img_size, img_size),
-            A.Normalize(mean=(0.5,), std=(0.5,)),
-            ToTensorV2()
-        ])
 
-# ---------------- Dataset ----------------
 class MultiTaskDataset(Dataset):
     def __init__(self, img_dir, mask_dir=None, class_to_idx=None,
                  transform=None, img_size=256):
@@ -39,7 +13,7 @@ class MultiTaskDataset(Dataset):
         img_dir: thư mục ảnh gốc (train/val/test)
         mask_dir: thư mục mask tương ứng (nếu có)
         class_to_idx: dict ánh xạ tên folder -> nhãn số
-        transform: augmentation (albumentations)
+        transform: augmentation (albumentations / torchvision)
         img_size: resize ảnh/mask về kích thước này
         """
         self.img_dir = img_dir
@@ -47,10 +21,11 @@ class MultiTaskDataset(Dataset):
         self.transform = transform
         self.img_size = img_size
 
+        # ánh xạ class_name -> index
         self.class_to_idx = class_to_idx if class_to_idx else {}
         self.samples = []
 
-        # duyệt file ảnh
+        # duyệt qua các file ảnh
         for root, _, files in os.walk(img_dir):
             class_name = os.path.basename(root)
             valid_files = [f for f in files if os.path.splitext(f)[-1].lower() in IMG_EXT]
@@ -74,32 +49,33 @@ class MultiTaskDataset(Dataset):
     def __getitem__(self, idx):
         img_path, mask_path, label = self.samples[idx]
 
-        # load ảnh gốc (grayscale)
+        # --- load ảnh ---
         img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
         if img is None:
             raise FileNotFoundError(f"[ERROR] Không đọc được ảnh: {img_path}")
+        img = cv2.resize(img, (self.img_size, self.img_size))
 
-        # load mask
+        # --- load mask ---
         if mask_path and os.path.exists(mask_path):
             mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+            mask = cv2.resize(mask, (self.img_size, self.img_size))
         else:
-            mask = np.zeros((img.shape[0], img.shape[1]), dtype=np.uint8)  # numpy array
+            mask = torch.zeros((self.img_size, self.img_size), dtype=torch.float32).numpy()
 
-        # apply transform (Albumentations)
+        # --- augmentation nếu có ---
         if self.transform:
             augmented = self.transform(image=img, mask=mask)
-            img, mask = augmented["image"], augmented["mask"]
-        else:
-            # fallback: resize + tensor hóa
-            img = cv2.resize(img, (self.img_size, self.img_size))
-            mask = cv2.resize(mask, (self.img_size, self.img_size))
-            img = torch.tensor(img / 255.0, dtype=torch.float32).unsqueeze(0)
-            mask = torch.tensor(mask / 255.0, dtype=torch.float32).unsqueeze(0)
+            img = augmented["image"]
+            mask = augmented["mask"]
 
+        # --- chuyển sang tensor ---
+        img = torch.tensor(img / 255.0, dtype=torch.float32).unsqueeze(0)   # [1,H,W]
+        mask = torch.tensor(mask / 255.0, dtype=torch.float32).unsqueeze(0) # [1,H,W]
         label = torch.tensor(label, dtype=torch.long)
+
         return img, mask, label
 
-# ---------------- DataLoader ----------------
+
 def get_loader(img_dir, mask_dir=None, class_to_idx=None,
                batch_size=4, shuffle=True, img_size=256, transform=None):
     dataset = MultiTaskDataset(

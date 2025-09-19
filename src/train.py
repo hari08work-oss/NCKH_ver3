@@ -5,13 +5,12 @@ import torch.optim as optim
 from tqdm import tqdm
 
 from src.config import *
-from src.data_loader import get_loader
+from src.data_loader import get_loader, get_transforms
 from src.utils import dice_score, iou_score, save_checkpoint
 
 
 def train(epochs, model_class, use_best_config=True, best_config_path="outputs/best_config.json"):
     # ----- load config -----
-    cfg = None
     if model_class.__name__ == "TransUNet" and use_best_config and os.path.exists(best_config_path):
         with open(best_config_path, "r", encoding="utf-8") as f:
             obj = json.load(f)
@@ -25,15 +24,15 @@ def train(epochs, model_class, use_best_config=True, best_config_path="outputs/b
             "num_heads": 4,
             "emb_size": 256,
             "patch_size": 16,
-            "img_size": 256,      # 👉 mặc định dùng 256 để đỡ tốn GPU
-            "batch_size": 1       # 👉 batch_size=1 cho GPU 4GB
+            "img_size": 256,
+            "batch_size": 1
         }
         print("[TRAIN] Using default config:", cfg)
 
     # ----- model + optimizer + loss -----
     if model_class.__name__ == "UNet":
         model = model_class(in_channels=1, out_channels=1).to(DEVICE)
-    else:  # Transformer
+    else:
         model = model_class(
             in_channels=1,
             out_channels=1,
@@ -46,11 +45,21 @@ def train(epochs, model_class, use_best_config=True, best_config_path="outputs/b
     optimizer = optim.AdamW(model.parameters(), lr=cfg["lr"], weight_decay=cfg["weight_decay"])
     criterion = nn.BCEWithLogitsLoss()
 
+    # ----- transforms -----
+    train_tf = get_transforms(cfg["img_size"], is_train=True)
+    val_tf   = get_transforms(cfg["img_size"], is_train=False)
+
     # ----- data -----
-    train_loader = get_loader(DATA_DIR + "/train", MASK_DIR + "/train",
-                              batch_size=cfg["batch_size"], img_size=cfg["img_size"])
-    val_loader = get_loader(DATA_DIR + "/val", MASK_DIR + "/val",
-                            batch_size=cfg["batch_size"], shuffle=False, img_size=cfg["img_size"])
+    train_loader = get_loader(
+        DATA_DIR + "/train", MASK_DIR + "/train",
+        batch_size=cfg["batch_size"], img_size=cfg["img_size"],
+        transform=train_tf
+    )
+    val_loader = get_loader(
+        DATA_DIR + "/val", MASK_DIR + "/val",
+        batch_size=cfg["batch_size"], shuffle=False, img_size=cfg["img_size"],
+        transform=val_tf
+    )
 
     best_dice = 0.0
     total_start = time.time()
@@ -66,9 +75,15 @@ def train(epochs, model_class, use_best_config=True, best_config_path="outputs/b
         for imgs, masks, _ in loop:
             imgs, masks = imgs.to(DEVICE), masks.to(DEVICE)
 
+            # đảm bảo masks có shape [N,1,H,W]
+            if masks.ndim == 3:
+                masks = masks.unsqueeze(1)
+
             preds = model(imgs)
             if preds.shape[2:] != masks.shape[2:]:
-                preds = torch.nn.functional.interpolate(preds, size=masks.shape[2:], mode="bilinear", align_corners=False)
+                preds = torch.nn.functional.interpolate(
+                    preds, size=masks.shape[2:], mode="bilinear", align_corners=False
+                )
 
             loss = criterion(preds, masks)
             optimizer.zero_grad()
@@ -90,9 +105,14 @@ def train(epochs, model_class, use_best_config=True, best_config_path="outputs/b
         with torch.no_grad():
             for imgs, masks, _ in val_loader:
                 imgs, masks = imgs.to(DEVICE), masks.to(DEVICE)
+                if masks.ndim == 3:
+                    masks = masks.unsqueeze(1)
+
                 preds = model(imgs)
                 if preds.shape[2:] != masks.shape[2:]:
-                    preds = torch.nn.functional.interpolate(preds, size=masks.shape[2:], mode="bilinear", align_corners=False)
+                    preds = torch.nn.functional.interpolate(
+                        preds, size=masks.shape[2:], mode="bilinear", align_corners=False
+                    )
 
                 loss = criterion(preds, masks)
                 val_loss += loss.item()
