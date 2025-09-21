@@ -6,7 +6,6 @@ def dice_score(pred, target, smooth=1e-6):
     pred = torch.sigmoid(pred)
     pred = (pred > 0.5).float()
     target = target.float()
-
     intersection = (pred * target).sum()
     return (2. * intersection + smooth) / (pred.sum() + target.sum() + smooth)
 
@@ -14,7 +13,6 @@ def iou_score(pred, target, smooth=1e-6):
     pred = torch.sigmoid(pred)
     pred = (pred > 0.5).float()
     target = target.float()
-
     intersection = (pred * target).sum()
     union = pred.sum() + target.sum() - intersection
     return (intersection + smooth) / (union + smooth)
@@ -34,3 +32,13 @@ def load_checkpoint(model, optimizer, path, device="cpu"):
     optimizer.load_state_dict(ckpt["optimizer_state"])
     print(f"[INFO] Loaded checkpoint from {path} (epoch {ckpt['epoch']})")
     return ckpt["epoch"]
+
+# --- NEW: tolerant loader ---
+def safe_load_model_state(path, device="cpu"):
+    """
+    Trả về state_dict cho model dù file là raw state_dict hay dict checkpoint.
+    """
+    obj = torch.load(path, map_location=device)
+    if isinstance(obj, dict) and "model_state" in obj:
+        return obj["model_state"]
+    return obj

@@ -1,8 +1,7 @@
 import torch
 
 # Đường dẫn
-DATA_DIR = "data/dataset_split"
-MASK_DIR = "data/dataset_split_masks"
+DATA_DIR = "data"
 CHECKPOINT_DIR = "outputs/checkpoints"
 
 # Cấu hình train

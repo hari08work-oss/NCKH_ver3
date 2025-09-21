@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from src.models.unet import DoubleConv
-from src.models.transformer import TransformerBlock
+from models.transformer import TransformerBlock
 
 class UNetTransformer(nn.Module):
     def __init__(self, in_channels=1, out_channels=1, img_size=256, emb_size=256, depth=2):

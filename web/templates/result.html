@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Kết quả phân đoạn</title>
+</head>
+<body>
+    <h2>Kết quả phân đoạn</h2>
+    <p>Ảnh gốc:</p>
+    <img src="{{ input_image }}" width="400">
+    <p>Ảnh dự đoán (overlay):</p>
+    <img src="{{ result_image }}" width="400">
+    <br><br>
+    <a href="{{ url_for('index') }}">← Thử lại ảnh khác</a>
+</body>
+</html>
